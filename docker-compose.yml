@@ -1,0 +1,55 @@
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: ratelimiter_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d ratelimiter_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  backend:
+    build: ./ratelimiter-backend
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/ratelimiter_db
+      DB_USERNAME: postgres
+      DB_PASSWORD: postgres
+      REDIS_HOST: redis
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+
+  gateway:
+    build: ./gateway-service
+    environment:
+      BACKEND_URL: http://backend:8080
+      REDIS_HOST: redis
+    depends_on:
+      redis:
+        condition: service_healthy
+      backend:
+        condition: service_started
+    ports:
+      - "9090:9090"
+
+volumes:
+  pgdata:
